@@ -1,0 +1,890 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paper2A 出題風格工具</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f8fa;
+        --surface: #ffffff;
+        --line: #d9dee7;
+        --text: #17202e;
+        --muted: #637083;
+        --blue: #2368c4;
+        --green: #1f7a58;
+        --amber: #a86414;
+        --danger: #b42318;
+        --shadow: 0 8px 24px rgba(27, 39, 61, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 18px 28px 14px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.94);
+        backdrop-filter: blur(12px);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 24px;
+        line-height: 1.2;
+      }
+
+      h2 {
+        font-size: 20px;
+      }
+
+      h3 {
+        font-size: 16px;
+      }
+
+      p,
+      li {
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--blue);
+      }
+
+      .tabs {
+        display: flex;
+        gap: 8px;
+      }
+
+      .tab,
+      button {
+        min-height: 40px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 650;
+      }
+
+      .tab {
+        display: inline-flex;
+        align-items: center;
+        padding: 0 16px;
+        text-decoration: none;
+      }
+
+      .tab.active {
+        border-color: var(--blue);
+        background: #e9f1ff;
+        color: #164f9b;
+      }
+
+      main {
+        width: min(1160px, calc(100vw - 32px));
+        margin: 24px auto 48px;
+      }
+
+      .panel {
+        display: none;
+      }
+
+      .panel.active {
+        display: block;
+      }
+
+      .toolbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+
+      .surface,
+      .question-grid article,
+      .summary,
+      .output-block {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .surface {
+        display: grid;
+        gap: 16px;
+        padding: 18px;
+        margin-bottom: 18px;
+      }
+
+      .question-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .question-grid article {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+        box-shadow: none;
+      }
+
+      fieldset {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+        margin: 0;
+        border: 0;
+        padding: 0;
+      }
+
+      legend {
+        padding: 0;
+        color: #344054;
+        font-weight: 750;
+      }
+
+      label {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        color: #344054;
+        line-height: 1.45;
+      }
+
+      input[type="radio"],
+      input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        margin-top: 1px;
+      }
+
+      input[type="text"],
+      select,
+      textarea {
+        width: 100%;
+        border: 1px solid #cbd3df;
+        border-radius: 8px;
+        padding: 11px 12px;
+        background: #fff;
+        color: var(--text);
+        font: inherit;
+      }
+
+      textarea {
+        resize: vertical;
+      }
+
+      .summary {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border-left: 5px solid var(--green);
+        box-shadow: none;
+      }
+
+      .summary.confirmed {
+        background: #f3faf6;
+      }
+
+      .facts {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .fact {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        background: #fbfcfe;
+      }
+
+      .fact b {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .primary,
+      .secondary {
+        width: fit-content;
+        padding: 0 18px;
+      }
+
+      .primary {
+        border-color: var(--blue);
+        background: var(--blue);
+        color: white;
+      }
+
+      .secondary {
+        border-color: #bad3c7;
+        background: #eef4ef;
+        color: var(--green);
+      }
+
+      .template-layout,
+      .generate-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .notice {
+        border: 1px solid #d4e5d9;
+        border-radius: 8px;
+        padding: 12px;
+        background: #f4faf6;
+        color: #365947;
+        line-height: 1.5;
+      }
+
+      .filedrop {
+        display: grid;
+        align-items: center;
+        min-height: 130px;
+        border: 1px dashed #8aa2c4;
+        border-radius: 8px;
+        padding: 18px;
+        background: #f3f7fc;
+        text-align: center;
+      }
+
+      .file-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .file-list article,
+      .question-item {
+        border: 1px solid #e5eaf1;
+        border-radius: 8px;
+        padding: 12px;
+        background: #fbfcfe;
+      }
+
+      .output-block {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        box-shadow: none;
+      }
+
+      .question-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .question-item {
+        display: grid;
+        gap: 8px;
+      }
+
+      .question-item header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .pill {
+        border-radius: 999px;
+        padding: 4px 9px;
+        background: #edf2f7;
+        color: #344054;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+
+      .toast {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        max-width: min(420px, calc(100vw - 40px));
+        border-radius: 8px;
+        padding: 12px 14px;
+        background: #17202e;
+        color: white;
+        box-shadow: var(--shadow);
+      }
+
+      @media (max-width: 820px) {
+        .topbar {
+          align-items: stretch;
+          flex-direction: column;
+          padding: 14px;
+        }
+
+        .tabs,
+        .facts,
+        .question-grid,
+        .template-layout,
+        .generate-grid {
+          grid-template-columns: 1fr;
+          display: grid;
+        }
+
+        main {
+          width: min(100vw - 20px, 1160px);
+          margin-top: 14px;
+        }
+
+        .tab,
+        .primary,
+        .secondary,
+        .actions {
+          width: 100%;
+          justify-content: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Paper2A 出題風格工具</h1>
+        <p>把科主任的評估取向轉成可確認的出題風格，再按範本產生考題初稿。</p>
+      </div>
+      <nav class="tabs" aria-label="出題工具分頁">
+        <button class="tab active" data-panel="stylePanel">老師風格</button>
+        <button class="tab" data-panel="templatePanel">參考範本</button>
+        <button class="tab" data-panel="generatePanel">產生考題</button>
+        <a class="tab" href="/">改卷 Agent</a>
+      </nav>
+    </header>
+
+    <main>
+      <section id="stylePanel" class="panel active">
+        <div class="toolbar">
+          <div>
+            <h2>老師出題風格問卷</h2>
+            <p>以下選項會整理成一份「老師出題風格」供確認。</p>
+          </div>
+        </div>
+        <form id="styleForm" class="surface">
+          <div id="questionGrid" class="question-grid"></div>
+          <label>
+            備註補充
+            <textarea id="styleRemarks" rows="5" placeholder="例如：這位老師很重視校本弱項分析，喜歡題目對應數據、分層能力和評分參考。"></textarea>
+          </label>
+          <div class="actions">
+            <button class="primary" type="button" id="buildProfileButton">整理出題風格結論</button>
+            <button class="secondary" type="button" id="confirmProfileButton">確認這個風格</button>
+            <button class="secondary" type="button" id="copyProfileButton">複製風格結論</button>
+          </div>
+        </form>
+        <section id="profileSummary" class="summary"></section>
+      </section>
+
+      <section id="templatePanel" class="panel">
+        <div class="toolbar">
+          <div>
+            <h2>參考出題範本</h2>
+            <p>可上傳文字檔作參考，也可直接貼上過往試卷、題型格式或評分參考。</p>
+          </div>
+        </div>
+        <div class="surface template-layout">
+          <label class="filedrop">
+            <span>上傳參考範本</span>
+            <input id="templateFiles" type="file" multiple accept=".txt,.md,.csv,.json,.html,.doc,.docx,.pdf,image/*" />
+          </label>
+          <label>
+            範本文字 / 題型格式
+            <textarea id="templateText" rows="12" placeholder="貼上參考題目、試卷結構、評分參考或題型格式。若上傳圖片/PDF，這個純 HTML 頁只會記錄檔名；要讀圖可之後接 Gemini 後端。"></textarea>
+          </label>
+        </div>
+        <div class="notice">目前這個頁面可直接讀取文字檔；PDF、Word 或圖片會先記錄檔名，若要自動讀內容，可接回 Paper2A 後台的 Gemini 讀圖流程。</div>
+        <section class="surface">
+          <h3>已上傳/輸入的範本</h3>
+          <div id="fileList" class="file-list"></div>
+        </section>
+      </section>
+
+      <section id="generatePanel" class="panel">
+        <div class="toolbar">
+          <div>
+            <h2>依風格與範本產生考題</h2>
+            <p>這裡會根據已確認的老師風格和範本產生考題初稿。</p>
+          </div>
+        </div>
+        <form id="generateForm" class="surface">
+          <div class="generate-grid">
+            <label>
+              出題科目
+              <select id="subject">
+                <option>中國語文</option>
+                <option>中國文學</option>
+                <option>中國語文及文學綜合</option>
+              </select>
+            </label>
+            <label>
+              級別
+              <select id="level">
+                <option>高中 DSE 班</option>
+                <option>中一至中三</option>
+                <option>中四</option>
+                <option>中五</option>
+                <option>中六</option>
+              </select>
+            </label>
+            <label>
+              試卷部分
+              <select id="paperPart">
+                <option>閱讀理解</option>
+                <option>寫作</option>
+                <option>實用文</option>
+                <option>文學賞析</option>
+                <option>語文運用</option>
+                <option>綜合能力</option>
+              </select>
+            </label>
+            <label>
+              題目數量
+              <select id="questionCount">
+                <option value="6">6 題</option>
+                <option value="8">8 題</option>
+                <option value="10">10 題</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            指定主題 / 篇章 / 能力弱項
+            <input id="topic" type="text" placeholder="例如：議論文論證、文言句式、人物形象、詩歌意象、實用文格式" />
+          </label>
+          <div class="actions">
+            <button class="primary" type="submit">產生考題初稿</button>
+            <button class="secondary" type="button" id="copyQuestionsButton">複製考題</button>
+            <button class="secondary" type="button" id="downloadQuestionsButton">下載文字檔</button>
+          </div>
+        </form>
+        <section id="questionOutput" class="output-block"></section>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <script>
+      const STYLE_QUESTIONS = [
+        {
+          id: "levels",
+          title: "主要任教級別",
+          type: "checkbox",
+          options: ["初中", "高中", "DSE 班", "跨級統籌"],
+        },
+        {
+          id: "subjectFocus",
+          title: "科目重心",
+          type: "radio",
+          options: ["中國語文為主", "中國文學為主", "語文與文學並重"],
+        },
+        {
+          id: "examAlignment",
+          title: "試卷取向",
+          type: "radio",
+          options: ["貼近 DSE / 公開試模式", "校本評核模式", "公開試框架加校本調整"],
+        },
+        {
+          id: "abilityFocus",
+          title: "最重視的能力",
+          type: "checkbox",
+          options: ["文本細讀", "語文運用", "寫作結構", "批判思考", "文學賞析", "價值反思"],
+        },
+        {
+          id: "questionStyle",
+          title: "題目語氣",
+          type: "radio",
+          options: ["直接清楚", "需要推論整合", "由淺入深逐步引導"],
+        },
+        {
+          id: "tiering",
+          title: "分層設計",
+          type: "radio",
+          options: ["明顯分基本/中階/高階", "以同一題內分層", "不刻意分層但保持區分度"],
+        },
+        {
+          id: "marking",
+          title: "評分參考要求",
+          type: "checkbox",
+          options: ["答案可量化", "重文本證據", "重評語可回饋教學", "方便統計分析"],
+        },
+        {
+          id: "questionTypes",
+          title: "常用題型",
+          type: "checkbox",
+          options: ["短答", "長答", "比較", "賞析", "評論", "實用文", "命題作文", "撮寫"],
+        },
+        {
+          id: "dataUse",
+          title: "數據取向",
+          type: "checkbox",
+          options: ["合格率", "優良率", "題目得分率", "弱項分析", "班際差異", "分卷平均分"],
+        },
+        {
+          id: "difficulty",
+          title: "難度風格",
+          type: "radio",
+          options: ["穩健基礎", "中高階思辨", "高區分度", "按學生弱項調整"],
+        },
+        {
+          id: "documentTone",
+          title: "文件語氣",
+          type: "checkbox",
+          options: ["正式", "精簡", "數據導向", "反思性", "行動計劃式", "政策化"],
+        },
+        {
+          id: "outputs",
+          title: "希望同步輸出",
+          type: "checkbox",
+          options: ["試卷", "評分參考", "考核重點", "預期難度", "學習目標", "弱項對應"],
+        },
+      ];
+
+      const tabs = document.querySelectorAll(".tabs button.tab");
+      const panels = document.querySelectorAll(".panel");
+      const toast = document.querySelector("#toast");
+      let uploadedTemplates = [];
+      let lastProfile = "";
+      let lastQuestions = "";
+      let profileConfirmed = false;
+
+      tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          tabs.forEach((item) => item.classList.toggle("active", item === tab));
+          panels.forEach((panel) => panel.classList.toggle("active", panel.id === tab.dataset.panel));
+        });
+      });
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.hidden = false;
+        window.clearTimeout(showToast.timer);
+        showToast.timer = window.setTimeout(() => {
+          toast.hidden = true;
+        }, 3000);
+      }
+
+      function renderQuestionForm() {
+        const grid = document.querySelector("#questionGrid");
+        grid.innerHTML = STYLE_QUESTIONS.map((question) => {
+          const inputs = question.options
+            .map((option, index) => {
+              const checked = index === 0 && question.type === "radio" ? "checked" : "";
+              return `
+                <label>
+                  <input ${checked} type="${question.type}" name="${question.id}" value="${escapeAttr(option)}" />
+                  <span>${escapeHtml(option)}</span>
+                </label>
+              `;
+            })
+            .join("");
+          return `
+            <article>
+              <fieldset>
+                <legend>${escapeHtml(question.title)}</legend>
+                ${inputs}
+              </fieldset>
+            </article>
+          `;
+        }).join("");
+      }
+
+      function getSelections() {
+        const data = {};
+        for (const question of STYLE_QUESTIONS) {
+          const checked = Array.from(document.querySelectorAll(`[name="${question.id}"]:checked`)).map((item) => item.value);
+          data[question.id] = question.type === "radio" ? checked[0] || "" : checked;
+        }
+        data.remarks = document.querySelector("#styleRemarks").value.trim();
+        return data;
+      }
+
+      function buildProfile() {
+        const data = getSelections();
+        profileConfirmed = false;
+        const profile = [
+          `老師角色定位：香港中學中國語文及文學科科主任，具課程統籌、評估設計、校務文件與成績數據分析職責。`,
+          `任教/統籌範圍：${asText(data.levels)}；科目重心：${data.subjectFocus}。`,
+          `出卷取向：${data.examAlignment}；題目語氣偏向${data.questionStyle}，難度風格為${data.difficulty}。`,
+          `核心能力：${asText(data.abilityFocus)}。`,
+          `題型偏好：${asText(data.questionTypes)}。`,
+          `評分設計：${asText(data.marking)}，並保留題目得分率與弱項分析空間。`,
+          `數據關注：${asText(data.dataUse)}。`,
+          `文件語氣：${asText(data.documentTone)}。`,
+          `輸出要求：${asText(data.outputs)}。`,
+          data.remarks ? `補充備註：${data.remarks}` : "",
+        ].filter(Boolean).join("\n");
+        lastProfile = profile;
+        document.querySelector("#profileSummary").innerHTML = `
+          <h3>老師出題風格結論</h3>
+          <div class="facts">
+            <div class="fact"><b>出題定位</b>${escapeHtml(data.examAlignment)}</div>
+            <div class="fact"><b>能力核心</b>${escapeHtml(asText(data.abilityFocus))}</div>
+            <div class="fact"><b>難度</b>${escapeHtml(data.difficulty)}</div>
+            <div class="fact"><b>數據</b>${escapeHtml(asText(data.dataUse))}</div>
+          </div>
+          <pre>${escapeHtml(profile)}</pre>
+          <p id="confirmStatus">狀態：尚未確認。確認後可到「產生考題」分頁套用。</p>
+        `;
+        return profile;
+      }
+
+      function asText(value) {
+        if (Array.isArray(value)) return value.length ? value.join("、") : "未指定";
+        return value || "未指定";
+      }
+
+      document.querySelector("#buildProfileButton").addEventListener("click", () => {
+        buildProfile();
+        showToast("已整理出題風格結論");
+      });
+
+      document.querySelector("#copyProfileButton").addEventListener("click", async () => {
+        const profile = lastProfile || buildProfile();
+        await navigator.clipboard.writeText(profile);
+        showToast("已複製風格結論");
+      });
+
+      document.querySelector("#confirmProfileButton").addEventListener("click", () => {
+        if (!lastProfile) buildProfile();
+        profileConfirmed = true;
+        const summary = document.querySelector("#profileSummary");
+        summary.classList.add("confirmed");
+        const status = document.querySelector("#confirmStatus");
+        if (status) status.textContent = "狀態：已確認，產生考題時會套用這份老師出題風格。";
+        showToast("已確認老師出題風格");
+      });
+
+      document.querySelector("#templateFiles").addEventListener("change", async (event) => {
+        const files = Array.from(event.target.files || []);
+        uploadedTemplates = [];
+        for (const file of files) {
+          let text = "";
+          if (/^text\//.test(file.type) || /\.(txt|md|csv|json|html)$/i.test(file.name)) {
+            text = await file.text();
+          }
+          uploadedTemplates.push({ name: file.name, type: file.type || "unknown", size: file.size, text });
+        }
+        const combined = uploadedTemplates.map((item) => item.text).filter(Boolean).join("\n\n---\n\n");
+        if (combined) {
+          const textarea = document.querySelector("#templateText");
+          textarea.value = textarea.value ? `${textarea.value}\n\n${combined}` : combined;
+        }
+        renderTemplateList();
+      });
+
+      document.querySelector("#templateText").addEventListener("input", renderTemplateList);
+
+      function renderTemplateList() {
+        const list = document.querySelector("#fileList");
+        const text = document.querySelector("#templateText").value.trim();
+        const rows = uploadedTemplates.map((file) => `
+          <article>
+            <strong>${escapeHtml(file.name)}</strong>
+            <p>${escapeHtml(file.type)}，${Math.round(file.size / 1024)} KB${file.text ? "，已讀取文字" : "，只記錄檔名"}</p>
+          </article>
+        `);
+        if (text) {
+          rows.unshift(`
+            <article>
+              <strong>已輸入範本文字</strong>
+              <p>${escapeHtml(text.slice(0, 240))}${text.length > 240 ? "..." : ""}</p>
+            </article>
+          `);
+        }
+        list.innerHTML = rows.length ? rows.join("") : `<article><p>尚未加入範本。</p></article>`;
+      }
+
+      document.querySelector("#generateForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const profile = lastProfile || buildProfile();
+        const subject = document.querySelector("#subject").value;
+        const level = document.querySelector("#level").value;
+        const paperPart = document.querySelector("#paperPart").value;
+        const count = Number(document.querySelector("#questionCount").value || 6);
+        const topic = document.querySelector("#topic").value.trim() || inferTopic();
+        const templateText = document.querySelector("#templateText").value.trim();
+        const questions = generateQuestions({ subject, level, paperPart, count, topic, templateText });
+        lastQuestions = formatOutput({ profile, subject, level, paperPart, topic, questions });
+        renderOutput({ profile, subject, level, paperPart, topic, questions });
+        showToast(profileConfirmed ? "已依確認風格產生考題初稿" : "已產生考題初稿，建議先確認老師風格");
+      });
+
+      function inferTopic() {
+        const text = document.querySelector("#templateText").value;
+        const keywords = extractKeywords(text);
+        return keywords[0] || "文本理解與表達能力";
+      }
+
+      function extractKeywords(text) {
+        const matches = Array.from(text.matchAll(/[\u4e00-\u9fff]{2,8}/g)).map((match) => match[0]);
+        const stop = new Set(["學生", "答案", "題目", "評分", "以下", "指出", "分析", "內容", "文字", "資料"]);
+        return [...new Set(matches.filter((word) => !stop.has(word)))].slice(0, 8);
+      }
+
+      function generateQuestions({ paperPart, count, topic, templateText }) {
+        const keywords = extractKeywords(templateText);
+        const source = keywords.length ? keywords : [topic, "文本細節", "結構安排", "語言特色", "主旨立意"];
+        const stems = stemsForPart(paperPart);
+        return Array.from({ length: count }, (_, index) => {
+          const stem = stems[index % stems.length];
+          const keyword = source[index % source.length];
+          const score = index < 2 ? 2 : index < 5 ? 4 : 6;
+          const level = index < Math.ceil(count / 3) ? "基礎理解" : index < Math.ceil((count * 2) / 3) ? "分析整合" : "評價創造";
+          return {
+            number: index + 1,
+            level,
+            score,
+            text: stem.replaceAll("{topic}", topic).replaceAll("{keyword}", keyword),
+            marking: markingFor(level, score),
+          };
+        });
+      }
+
+      function stemsForPart(part) {
+        const common = [
+          "根據文本，試指出與「{keyword}」相關的一項重點，並引用文本作證。",
+          "作者如何運用「{keyword}」推進文章主旨？試加以說明。",
+          "試分析「{topic}」在文中的作用，並說明其與全文結構的關係。",
+          "你是否同意作者對「{keyword}」的看法？請結合文本及個人理解作答。",
+        ];
+        const byPart = {
+          閱讀理解: common,
+          寫作: [
+            "以「{topic}」為題，寫作一篇文章，須有明確立意、完整結構及具體例證。",
+            "試就「{keyword}」引發的思考，寫作一篇議論文，表明立場並加以論證。",
+            "根據範本風格，設計一段開首及結尾，要求能扣連「{topic}」。",
+            "請改寫以下情境為一段具層次的說明文字，重點突出「{keyword}」。",
+          ],
+          實用文: [
+            "因應「{topic}」撰寫一篇實用文，須符合格式、語境及對象需要。",
+            "試指出實用文中與「{keyword}」相關的目的及對象，並說明語氣要求。",
+            "根據情境，列出實用文正文三個主要內容重點。",
+            "試評估一篇實用文能否有效處理「{keyword}」問題，並提出改善建議。",
+          ],
+          文學賞析: [
+            "試賞析作品中「{keyword}」的形象或意象，並說明其藝術效果。",
+            "作者如何透過語言、節奏或結構呈現「{topic}」？",
+            "比較文中兩處描寫，分析它們如何深化「{keyword}」。",
+            "你認為作品最能體現「{topic}」的是哪一處？試加以賞析。",
+          ],
+        };
+        return byPart[part] || common;
+      }
+
+      function markingFor(level, score) {
+        if (level === "基礎理解") return `滿分 ${score} 分：準確指出資料重點，能引用或概括文本依據。`;
+        if (level === "分析整合") return `滿分 ${score} 分：分析清楚，能連繫文本細節、結構或語言效果，表達有條理。`;
+        return `滿分 ${score} 分：觀點明確，能多角度評價，論證充分，能回扣題旨或學習目標。`;
+      }
+
+      function renderOutput({ profile, subject, level, paperPart, topic, questions }) {
+        const output = document.querySelector("#questionOutput");
+        output.innerHTML = `
+          <h3>考題初稿</h3>
+          <div class="facts">
+            <div class="fact"><b>科目</b>${escapeHtml(subject)}</div>
+            <div class="fact"><b>級別</b>${escapeHtml(level)}</div>
+            <div class="fact"><b>部分</b>${escapeHtml(paperPart)}</div>
+            <div class="fact"><b>主題</b>${escapeHtml(topic)}</div>
+          </div>
+          <h3>已套用的老師出題風格</h3>
+          <p>${profileConfirmed ? "這份風格已由你確認。" : "這份風格尚未按確認，但已先套用目前問卷結果。"}</p>
+          <pre>${escapeHtml(profile)}</pre>
+          <div class="question-list">
+            ${questions.map((item) => `
+              <article class="question-item">
+                <header>
+                  <strong>第 ${item.number} 題</strong>
+                  <span class="pill">${item.level}｜${item.score} 分</span>
+                </header>
+                <p>${escapeHtml(item.text)}</p>
+                <small>${escapeHtml(item.marking)}</small>
+              </article>
+            `).join("")}
+          </div>
+        `;
+      }
+
+      function formatOutput({ profile, subject, level, paperPart, topic, questions }) {
+        return [
+          `科目：${subject}`,
+          `級別：${level}`,
+          `試卷部分：${paperPart}`,
+          `主題：${topic}`,
+          "",
+          "老師出題風格：",
+          profile,
+          "",
+          "考題初稿：",
+          ...questions.map((item) => `第 ${item.number} 題（${item.level}，${item.score} 分）\n${item.text}\n評分參考：${item.marking}`),
+        ].join("\n\n");
+      }
+
+      document.querySelector("#copyQuestionsButton").addEventListener("click", async () => {
+        if (!lastQuestions) document.querySelector("#generateForm").requestSubmit();
+        await navigator.clipboard.writeText(lastQuestions);
+        showToast("已複製考題");
+      });
+
+      document.querySelector("#downloadQuestionsButton").addEventListener("click", () => {
+        if (!lastQuestions) document.querySelector("#generateForm").requestSubmit();
+        const blob = new Blob([lastQuestions], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "paper2a-question-draft.txt";
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function escapeAttr(value) {
+        return escapeHtml(value).replace(/`/g, "&#096;");
+      }
+
+      renderQuestionForm();
+      renderTemplateList();
+      buildProfile();
+    </script>
+  </body>
+</html>

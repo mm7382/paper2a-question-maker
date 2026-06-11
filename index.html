@@ -790,11 +790,16 @@
         }
         const patterns = extractQuestionPatterns(text);
         const keywords = extractKeywords(text);
+        const article = extractArticleSegments(text);
         const hasReadingSignals = /閱讀|文章|文本|作者|根據|段落|引用|說明|指出|分析/.test(text);
         target.innerHTML = `
           <article>
             <strong>${hasReadingSignals ? "已偵測到閱讀理解相關範本" : "未明顯偵測到閱讀理解題式"}</strong>
             <p>關鍵詞：${escapeHtml(keywords.join("、") || "未抽取到明顯關鍵詞")}</p>
+          </article>
+          <article>
+            <strong>抽取到的文章依據</strong>
+            <pre>${escapeHtml(article.length ? article.map((item) => `第 ${item.paragraph} 段：${item.text}`).join("\n\n") : "未抽取到文章段落。請把閱讀文章正文貼入範本文字欄，考題才會扣回文章。")}</pre>
           </article>
           <article>
             <strong>抽取到的題式</strong>
@@ -840,11 +845,35 @@
           .slice(0, 10);
       }
 
+      function extractArticleSegments(text) {
+        const normalized = text
+          .replace(/\r/g, "\n")
+          .replace(/[ \t]+/g, " ")
+          .replace(/\n{3,}/g, "\n\n");
+        const blocks = normalized
+          .split(/\n{2,}|\n(?=[　\s]*[\u4e00-\u9fff]{18,})/)
+          .map((block) => block.replace(/\s+/g, " ").trim())
+          .filter(Boolean);
+        const noise = /評分|答案|分數|滿分|題目|問題|試卷|姓名|班別|學號|作答|指出|說明|分析|根據|引用|選擇|以下哪|第\s*\d+\s*題/;
+        const articleBlocks = blocks
+          .filter((block) => block.length >= 35)
+          .filter((block) => !noise.test(block.slice(0, 40)))
+          .filter((block) => /[\u4e00-\u9fff]/.test(block))
+          .slice(0, 8);
+        return articleBlocks.map((block, index) => ({
+          paragraph: index + 1,
+          text: block.length > 180 ? `${block.slice(0, 180)}...` : block,
+          fullText: block,
+        }));
+      }
+
       function generateQuestions({ paperPart, count, topic, templateText }) {
         const keywords = extractKeywords(templateText);
         const source = keywords.length ? keywords : [topic, "文本細節", "結構安排", "語言特色", "主旨立意"];
-        const templatePatterns = extractQuestionPatterns(templateText);
-        const stems = paperPart === "閱讀理解" && templatePatterns.length ? templatePatterns : stemsForPart(paperPart);
+        if (paperPart === "閱讀理解") {
+          return generateReadingQuestions({ count, topic, templateText, keywords: source });
+        }
+        const stems = stemsForPart(paperPart);
         return Array.from({ length: count }, (_, index) => {
           const stem = stems[index % stems.length];
           const keyword = source[index % source.length];
@@ -854,17 +883,45 @@
             number: index + 1,
             level,
             score,
-            text: buildQuestionText({ stem, paperPart, topic, keyword, fromTemplate: templatePatterns.includes(stem) }),
+            text: stem.replaceAll("{topic}", topic).replaceAll("{keyword}", keyword),
             marking: markingFor(level, score),
           };
         });
       }
 
-      function buildQuestionText({ stem, paperPart, topic, keyword, fromTemplate }) {
-        if (!fromTemplate) return stem.replaceAll("{topic}", topic).replaceAll("{keyword}", keyword);
-        if (paperPart !== "閱讀理解") return stem;
-        const cleanStem = stem.length > 90 ? `${stem.slice(0, 90)}...` : stem;
-        return `參考範本題式：「${cleanStem}」\n新題：根據指定篇章，試就「${keyword || topic}」擬一道閱讀理解題，要求學生引用文本依據，並說明其與「${topic}」的關係。`;
+      function generateReadingQuestions({ count, topic, templateText, keywords }) {
+        const article = extractArticleSegments(templateText);
+        const usableArticle = article.length ? article : [
+          { paragraph: 1, text: templateText.slice(0, 180) || topic, fullText: templateText || topic },
+        ];
+        const templates = [
+          ({ paragraph, phrase }) => `根據第 ${paragraph} 段，作者提及「${phrase}」的主要用意是甚麼？試用自己的文字說明。`,
+          ({ paragraph, phrase }) => `第 ${paragraph} 段中「${phrase}」反映了文章哪一項重點？請引用文中內容作證。`,
+          ({ paragraph, phrase }) => `綜合第 ${paragraph} 段內容，試指出作者對「${phrase}」的態度，並說明判斷依據。`,
+          ({ paragraph, phrase }) => `文中如何透過第 ${paragraph} 段的內容推進「${topic}」這一主題？試加以分析。`,
+          ({ paragraph, phrase }) => `試分析「${phrase}」在文章結構上的作用，並說明它與前後文的關係。`,
+          ({ paragraph, phrase }) => `你是否同意作者在第 ${paragraph} 段對「${phrase}」的看法？請結合文章內容及個人理解作答。`,
+        ];
+        return Array.from({ length: count }, (_, index) => {
+          const evidence = usableArticle[index % usableArticle.length];
+          const phrase = pickEvidencePhrase(evidence.fullText, keywords[index % keywords.length] || topic);
+          const score = index < 2 ? 2 : index < 5 ? 4 : 6;
+          const level = index < Math.ceil(count / 3) ? "基礎理解" : index < Math.ceil((count * 2) / 3) ? "分析整合" : "評價創造";
+          return {
+            number: index + 1,
+            level,
+            score,
+            text: `${templates[index % templates.length]({ paragraph: evidence.paragraph, phrase })}\n文章依據：第 ${evidence.paragraph} 段「${evidence.text}」`,
+            marking: markingFor(level, score),
+          };
+        });
+      }
+
+      function pickEvidencePhrase(text, fallback) {
+        const candidates = Array.from(text.matchAll(/[\u4e00-\u9fff]{3,10}/g))
+          .map((match) => match[0])
+          .filter((word) => !/的主要|作者|文章|因此|但是|可以|這個|我們|他們/.test(word));
+        return candidates[0] || fallback || "文章重點";
       }
 
       function stemsForPart(part) {

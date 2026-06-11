@@ -272,6 +272,13 @@
         line-height: 1.5;
       }
 
+      .backend-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: end;
+      }
+
       .filedrop {
         display: grid;
         align-items: center;
@@ -428,6 +435,16 @@
             <h2>參考出題範本</h2>
             <p>可上傳文字檔作參考，也可直接貼上過往試卷、題型格式或評分參考。</p>
           </div>
+        </div>
+        <div class="surface">
+          <label>
+            Paper2A 後台網址
+            <div class="backend-row">
+              <input id="backendBase" type="text" placeholder="如果在 GitHub Pages 使用，填入你的 Paper2A tunnel 網址；在 Paper2A 本機網站可留空。" />
+              <button class="secondary" type="button" id="saveBackendButton">儲存</button>
+            </div>
+          </label>
+          <p id="backendStatus">後台狀態：尚未檢查。</p>
         </div>
         <div class="surface template-layout">
           <label class="filedrop">
@@ -598,6 +615,7 @@
       let lastProfile = "";
       let lastQuestions = "";
       let profileConfirmed = false;
+      const isGithubPages = location.hostname.endsWith("github.io");
 
       tabs.forEach((tab) => {
         tab.addEventListener("click", () => {
@@ -706,8 +724,31 @@
         showToast("已確認老師出題風格");
       });
 
+      document.querySelector("#saveBackendButton").addEventListener("click", () => {
+        localStorage.setItem("paper2aQuestionMakerBackend", getBackendBase());
+        checkBackend();
+      });
+
       document.querySelector("#templateFiles").addEventListener("change", async (event) => {
         const files = Array.from(event.target.files || []);
+        const backendResult = await extractFilesWithBackend(files);
+        if (backendResult) {
+          uploadedTemplates = backendResult.documents.map((doc) => ({
+            name: doc.name,
+            type: "backend",
+            size: 0,
+            text: doc.text,
+            note: doc.note,
+          }));
+          if (backendResult.text) {
+            const textarea = document.querySelector("#templateText");
+            textarea.value = textarea.value ? `${textarea.value}\n\n${backendResult.text}` : backendResult.text;
+          }
+          renderTemplateList();
+          renderAnalysisData(backendResult.analysis);
+          showToast("已用 Paper2A 後台讀取範本");
+          return;
+        }
         uploadedTemplates = [];
         for (const file of files) {
           const result = await readTemplateFile(file);
@@ -728,6 +769,54 @@
       });
 
       document.querySelector("#templateText").addEventListener("input", renderTemplateList);
+
+      function getBackendBase() {
+        return (document.querySelector("#backendBase")?.value || "").trim().replace(/\/+$/, "");
+      }
+
+      async function apiFetch(path, options = {}) {
+        const base = getBackendBase();
+        if (isGithubPages && !base) throw new Error("GitHub Pages 需要填 Paper2A 後台網址");
+        const response = await fetch(`${base}${path}`, options);
+        if (!response.ok) {
+          let message = `HTTP ${response.status}`;
+          try {
+            const payload = await response.json();
+            message = payload.detail || message;
+          } catch {
+            message = await response.text();
+          }
+          throw new Error(message);
+        }
+        return response.json();
+      }
+
+      async function checkBackend() {
+        const status = document.querySelector("#backendStatus");
+        try {
+          const data = await apiFetch("/api/status");
+          status.textContent = `後台狀態：已連線，${data.llm_provider} / ${data.gemini_model || data.ollama_model || data.openai_model}`;
+        } catch (error) {
+          status.textContent = isGithubPages
+            ? "後台狀態：未連線。GitHub Pages 如要讀圖片/PDF 掃描檔，請填 Paper2A tunnel 網址。"
+            : `後台狀態：未連線，將使用瀏覽器版。${error.message}`;
+        }
+      }
+
+      async function extractFilesWithBackend(files) {
+        if (!files.length) return null;
+        try {
+          const form = new FormData();
+          files.forEach((file) => form.append("files", file));
+          return await apiFetch("/api/question-maker/extract", {
+            method: "POST",
+            body: form,
+          });
+        } catch (error) {
+          showToast(`後台讀取未成功，改用瀏覽器版：${error.message}`);
+          return null;
+        }
+      }
 
       async function readTemplateFile(file) {
         const name = file.name.toLowerCase();
@@ -792,6 +881,20 @@
         const keywords = extractKeywords(text);
         const article = extractArticleSegments(text);
         const hasReadingSignals = /閱讀|文章|文本|作者|根據|段落|引用|說明|指出|分析/.test(text);
+        renderAnalysisData({
+          keywords,
+          article_segments: article.map((item) => ({ paragraph: item.paragraph, text: item.text })),
+          question_patterns: patterns,
+          has_reading_signals: hasReadingSignals,
+        });
+      }
+
+      function renderAnalysisData(analysis) {
+        const target = document.querySelector("#templateAnalysis");
+        const patterns = analysis.question_patterns || [];
+        const keywords = analysis.keywords || [];
+        const article = analysis.article_segments || [];
+        const hasReadingSignals = Boolean(analysis.has_reading_signals);
         target.innerHTML = `
           <article>
             <strong>${hasReadingSignals ? "已偵測到閱讀理解相關範本" : "未明顯偵測到閱讀理解題式"}</strong>
@@ -810,6 +913,10 @@
 
       document.querySelector("#generateForm").addEventListener("submit", (event) => {
         event.preventDefault();
+        generateWithBestEngine();
+      });
+
+      async function generateWithBestEngine() {
         const profile = lastProfile || buildProfile();
         const subject = document.querySelector("#subject").value;
         const level = document.querySelector("#level").value;
@@ -817,11 +924,40 @@
         const count = Number(document.querySelector("#questionCount").value || 6);
         const topic = document.querySelector("#topic").value.trim() || inferTopic();
         const templateText = document.querySelector("#templateText").value.trim();
+        try {
+          const data = await apiFetch("/api/question-maker/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subject,
+              level,
+              paper_part: paperPart,
+              count,
+              topic,
+              template_text: templateText,
+              profile,
+            }),
+          });
+          lastQuestions = data.output;
+          renderOutput({
+            profile,
+            subject: data.subject,
+            level: data.level,
+            paperPart: data.paper_part,
+            topic: data.topic,
+            questions: data.questions,
+          });
+          renderAnalysisData(data.analysis);
+          showToast("已用 Paper2A 後台產生扣文考題");
+          return;
+        } catch (error) {
+          showToast(`後台產生未成功，改用瀏覽器版：${error.message}`);
+        }
         const questions = generateQuestions({ subject, level, paperPart, count, topic, templateText });
         lastQuestions = formatOutput({ profile, subject, level, paperPart, topic, questions });
         renderOutput({ profile, subject, level, paperPart, topic, questions });
         showToast(profileConfirmed ? "已依確認風格產生考題初稿" : "已產生考題初稿，建議先確認老師風格");
-      });
+      }
 
       function inferTopic() {
         const text = document.querySelector("#templateText").value;
@@ -1090,6 +1226,8 @@
       renderQuestionForm();
       renderTemplateList();
       buildProfile();
+      document.querySelector("#backendBase").value = localStorage.getItem("paper2aQuestionMakerBackend") || "";
+      checkBackend();
     </script>
   </body>
 </html>

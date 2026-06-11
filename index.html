@@ -289,11 +289,17 @@
       }
 
       .file-list article,
+      .analysis-list article,
       .question-item {
         border: 1px solid #e5eaf1;
         border-radius: 8px;
         padding: 12px;
         background: #fbfcfe;
+      }
+
+      .analysis-list {
+        display: grid;
+        gap: 8px;
       }
 
       .output-block {
@@ -317,6 +323,15 @@
         display: flex;
         justify-content: space-between;
         gap: 12px;
+      }
+
+      pre {
+        max-height: 320px;
+        overflow: auto;
+        margin: 0;
+        white-space: pre-wrap;
+        color: #344054;
+        font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
 
       .pill {
@@ -421,13 +436,17 @@
           </label>
           <label>
             範本文字 / 題型格式
-            <textarea id="templateText" rows="12" placeholder="貼上參考題目、試卷結構、評分參考或題型格式。若上傳圖片/PDF，這個純 HTML 頁只會記錄檔名；要讀圖可之後接 Gemini 後端。"></textarea>
+            <textarea id="templateText" rows="12" placeholder="貼上參考題目、試卷結構、評分參考或題型格式。上傳 PDF / Word 時，系統會嘗試在瀏覽器內抽取文字；圖片暫時需要先用 ChatGPT / OCR 轉成文字再貼上。"></textarea>
           </label>
         </div>
-        <div class="notice">目前這個頁面可直接讀取文字檔；PDF、Word 或圖片會先記錄檔名，若要自動讀內容，可接回 Paper2A 後台的 Gemini 讀圖流程。</div>
+        <div class="notice">目前可讀取文字檔、部分 PDF 和 Word 文字內容。掃描圖片或拍照檔不會自動 OCR，請先轉成文字貼入欄位。</div>
         <section class="surface">
           <h3>已上傳/輸入的範本</h3>
           <div id="fileList" class="file-list"></div>
+        </section>
+        <section class="surface">
+          <h3>範本分析</h3>
+          <div id="templateAnalysis" class="analysis-list"></div>
         </section>
       </section>
 
@@ -494,6 +513,8 @@
 
     <div id="toast" class="toast" hidden></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://unpkg.com/mammoth@1.8.0/mammoth.browser.min.js"></script>
     <script>
       const STYLE_QUESTIONS = [
         {
@@ -689,11 +710,14 @@
         const files = Array.from(event.target.files || []);
         uploadedTemplates = [];
         for (const file of files) {
-          let text = "";
-          if (/^text\//.test(file.type) || /\.(txt|md|csv|json|html)$/i.test(file.name)) {
-            text = await file.text();
-          }
-          uploadedTemplates.push({ name: file.name, type: file.type || "unknown", size: file.size, text });
+          const result = await readTemplateFile(file);
+          uploadedTemplates.push({
+            name: file.name,
+            type: file.type || "unknown",
+            size: file.size,
+            text: result.text,
+            note: result.note,
+          });
         }
         const combined = uploadedTemplates.map((item) => item.text).filter(Boolean).join("\n\n---\n\n");
         if (combined) {
@@ -705,13 +729,44 @@
 
       document.querySelector("#templateText").addEventListener("input", renderTemplateList);
 
+      async function readTemplateFile(file) {
+        const name = file.name.toLowerCase();
+        if (/^text\//.test(file.type) || /\.(txt|md|csv|json|html)$/i.test(file.name)) {
+          return { text: await file.text(), note: "已讀取文字" };
+        }
+        if (/\.docx$/i.test(file.name)) {
+          if (!window.mammoth) return { text: "", note: "未能載入 Word 讀取工具，請貼上文字" };
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await window.mammoth.extractRawText({ arrayBuffer });
+          return { text: result.value.trim(), note: result.value.trim() ? "已讀取 Word 文字" : "Word 內沒有可抽取文字" };
+        }
+        if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+          if (!window.pdfjsLib) return { text: "", note: "未能載入 PDF 讀取工具，請貼上文字" };
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+          const data = new Uint8Array(await file.arrayBuffer());
+          const pdf = await window.pdfjsLib.getDocument({ data }).promise;
+          const pages = [];
+          for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+            const page = await pdf.getPage(pageNumber);
+            const content = await page.getTextContent();
+            pages.push(content.items.map((item) => item.str).join(" "));
+          }
+          const text = pages.join("\n\n").trim();
+          return { text, note: text ? `已讀取 PDF 文字，共 ${pdf.numPages} 頁` : "PDF 可能是掃描圖片，請先 OCR 後貼上文字" };
+        }
+        if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|heic)$/i.test(name)) {
+          return { text: "", note: "圖片檔暫時不能在純 HTML 版自動 OCR，請先轉文字再貼上" };
+        }
+        return { text: "", note: "這個格式暫時不能直接讀取，請貼上範本文字" };
+      }
+
       function renderTemplateList() {
         const list = document.querySelector("#fileList");
         const text = document.querySelector("#templateText").value.trim();
         const rows = uploadedTemplates.map((file) => `
           <article>
             <strong>${escapeHtml(file.name)}</strong>
-            <p>${escapeHtml(file.type)}，${Math.round(file.size / 1024)} KB${file.text ? "，已讀取文字" : "，只記錄檔名"}</p>
+            <p>${escapeHtml(file.type)}，${Math.round(file.size / 1024)} KB，${escapeHtml(file.note || (file.text ? "已讀取文字" : "只記錄檔名"))}</p>
           </article>
         `);
         if (text) {
@@ -723,6 +778,29 @@
           `);
         }
         list.innerHTML = rows.length ? rows.join("") : `<article><p>尚未加入範本。</p></article>`;
+        renderTemplateAnalysis();
+      }
+
+      function renderTemplateAnalysis() {
+        const target = document.querySelector("#templateAnalysis");
+        const text = document.querySelector("#templateText").value.trim();
+        if (!text) {
+          target.innerHTML = `<article><p>尚未讀到範本文字。若你上傳的是圖片或掃描 PDF，請先 OCR 成文字再貼入上方欄位。</p></article>`;
+          return;
+        }
+        const patterns = extractQuestionPatterns(text);
+        const keywords = extractKeywords(text);
+        const hasReadingSignals = /閱讀|文章|文本|作者|根據|段落|引用|說明|指出|分析/.test(text);
+        target.innerHTML = `
+          <article>
+            <strong>${hasReadingSignals ? "已偵測到閱讀理解相關範本" : "未明顯偵測到閱讀理解題式"}</strong>
+            <p>關鍵詞：${escapeHtml(keywords.join("、") || "未抽取到明顯關鍵詞")}</p>
+          </article>
+          <article>
+            <strong>抽取到的題式</strong>
+            <pre>${escapeHtml(patterns.length ? patterns.map((item, index) => `${index + 1}. ${item}`).join("\n") : "未抽取到明確題式。請把題目文字貼入範本文字欄。")}</pre>
+          </article>
+        `;
       }
 
       document.querySelector("#generateForm").addEventListener("submit", (event) => {
@@ -748,14 +826,25 @@
 
       function extractKeywords(text) {
         const matches = Array.from(text.matchAll(/[\u4e00-\u9fff]{2,8}/g)).map((match) => match[0]);
-        const stop = new Set(["學生", "答案", "題目", "評分", "以下", "指出", "分析", "內容", "文字", "資料"]);
+        const stop = new Set(["學生", "答案", "題目", "評分", "以下", "指出", "分析", "內容", "文字", "資料", "根據", "文章", "作者", "說明", "試卷", "閱讀"]);
         return [...new Set(matches.filter((word) => !stop.has(word)))].slice(0, 8);
+      }
+
+      function extractQuestionPatterns(text) {
+        return text
+          .split(/\n|。|；|;/)
+          .map((line) => line.replace(/\s+/g, " ").trim())
+          .filter((line) => line.length >= 8)
+          .filter((line) => /根據|試|指出|說明|分析|作者|文中|為何|為甚麼|如何|引用|比較|你認為|是否同意/.test(line))
+          .map((line) => line.replace(/^[\d０-９一二三四五六七八九十]+[.)、．]\s*/, ""))
+          .slice(0, 10);
       }
 
       function generateQuestions({ paperPart, count, topic, templateText }) {
         const keywords = extractKeywords(templateText);
         const source = keywords.length ? keywords : [topic, "文本細節", "結構安排", "語言特色", "主旨立意"];
-        const stems = stemsForPart(paperPart);
+        const templatePatterns = extractQuestionPatterns(templateText);
+        const stems = paperPart === "閱讀理解" && templatePatterns.length ? templatePatterns : stemsForPart(paperPart);
         return Array.from({ length: count }, (_, index) => {
           const stem = stems[index % stems.length];
           const keyword = source[index % source.length];
@@ -765,10 +854,17 @@
             number: index + 1,
             level,
             score,
-            text: stem.replaceAll("{topic}", topic).replaceAll("{keyword}", keyword),
+            text: buildQuestionText({ stem, paperPart, topic, keyword, fromTemplate: templatePatterns.includes(stem) }),
             marking: markingFor(level, score),
           };
         });
+      }
+
+      function buildQuestionText({ stem, paperPart, topic, keyword, fromTemplate }) {
+        if (!fromTemplate) return stem.replaceAll("{topic}", topic).replaceAll("{keyword}", keyword);
+        if (paperPart !== "閱讀理解") return stem;
+        const cleanStem = stem.length > 90 ? `${stem.slice(0, 90)}...` : stem;
+        return `參考範本題式：「${cleanStem}」\n新題：根據指定篇章，試就「${keyword || topic}」擬一道閱讀理解題，要求學生引用文本依據，並說明其與「${topic}」的關係。`;
       }
 
       function stemsForPart(part) {

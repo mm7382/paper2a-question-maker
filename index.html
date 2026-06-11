@@ -885,6 +885,7 @@
             score,
             text: stem.replaceAll("{topic}", topic).replaceAll("{keyword}", keyword),
             marking: markingFor(level, score),
+            answer: genericAnswerFor(paperPart, level, topic, keyword),
           };
         });
       }
@@ -913,8 +914,52 @@
             score,
             text: `${templates[index % templates.length]({ paragraph: evidence.paragraph, phrase })}\n文章依據：第 ${evidence.paragraph} 段「${evidence.text}」`,
             marking: markingFor(level, score),
+            answer: buildReadingAnswer({ evidence, phrase, level, score, topic }),
           };
         });
+      }
+
+      function buildReadingAnswer({ evidence, phrase, level, score, topic }) {
+        const sentences = splitChineseSentences(evidence.fullText);
+        const directEvidence = findBestEvidenceSentence(sentences, phrase) || evidence.text;
+        const support = sentences.find((sentence) => sentence !== directEvidence && sentence.length >= 12) || directEvidence;
+        const points = [
+          `須扣回第 ${evidence.paragraph} 段作答，不可只作空泛評論。`,
+          `可指出「${phrase}」與段落重點的關係：${summarizeSentence(directEvidence)}。`,
+        ];
+        if (level !== "基礎理解") {
+          points.push(`須引用或概括相關文句，例如：「${trimEvidence(directEvidence)}」。`);
+          points.push(`可進一步連繫主題「${topic}」：${summarizeSentence(support)}。`);
+        }
+        if (level === "評價創造") {
+          points.push("可加入合理個人判斷，但必須以文章內容作根據。");
+        }
+        return [
+          `參考答案要點：`,
+          ...points.map((point) => `- ${point}`),
+          `給分建議：滿分 ${score} 分；內容準確及扣文 ${Math.max(1, score - 2)} 分，引用/概括文本依據 1 分，表達清楚完整 1 分。`,
+        ].join("\n");
+      }
+
+      function splitChineseSentences(text) {
+        return String(text || "")
+          .split(/(?<=[。！？；;])|\n+/)
+          .map((sentence) => sentence.replace(/\s+/g, " ").trim())
+          .filter((sentence) => sentence.length >= 8);
+      }
+
+      function findBestEvidenceSentence(sentences, phrase) {
+        return sentences.find((sentence) => sentence.includes(phrase)) || sentences[0] || "";
+      }
+
+      function summarizeSentence(sentence) {
+        const clean = trimEvidence(sentence);
+        if (!clean) return "能顯示文章的主要意思或作者取態";
+        return clean.length > 48 ? `${clean.slice(0, 48)}...` : clean;
+      }
+
+      function trimEvidence(text) {
+        return String(text || "").replace(/\s+/g, " ").trim().slice(0, 90);
       }
 
       function pickEvidencePhrase(text, fallback) {
@@ -961,6 +1006,13 @@
         return `滿分 ${score} 分：觀點明確，能多角度評價，論證充分，能回扣題旨或學習目標。`;
       }
 
+      function genericAnswerFor(part, level, topic, keyword) {
+        if (part === "寫作") return `參考方向：須扣連「${topic}」，立意清楚，內容具體，有例證支撐，段落安排完整。`;
+        if (part === "實用文") return `參考方向：須符合指定格式、對象、語境和目的，正文內容應圍繞「${keyword}」或「${topic}」展開。`;
+        if (part === "文學賞析") return `參考方向：須指出作品中與「${keyword}」相關的語言/形象/意象，並分析其藝術效果。`;
+        return `參考方向：須扣回「${topic}」及「${keyword}」，答案要有清楚觀點和文本依據。`;
+      }
+
       function renderOutput({ profile, subject, level, paperPart, topic, questions }) {
         const output = document.querySelector("#questionOutput");
         output.innerHTML = `
@@ -982,6 +1034,7 @@
                   <span class="pill">${item.level}｜${item.score} 分</span>
                 </header>
                 <p>${escapeHtml(item.text)}</p>
+                <pre>${escapeHtml(item.answer || "")}</pre>
                 <small>${escapeHtml(item.marking)}</small>
               </article>
             `).join("")}
@@ -1000,7 +1053,7 @@
           profile,
           "",
           "考題初稿：",
-          ...questions.map((item) => `第 ${item.number} 題（${item.level}，${item.score} 分）\n${item.text}\n評分參考：${item.marking}`),
+          ...questions.map((item) => `第 ${item.number} 題（${item.level}，${item.score} 分）\n${item.text}\n\n${item.answer || ""}\n評分參考：${item.marking}`),
         ].join("\n\n");
       }
 
